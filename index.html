@@ -68,6 +68,12 @@ main{padding:12px 14px 0}
 .chip.done{background:#e8f6ef;border-color:#c6e8d8;color:var(--mintd)}
 .chip.nc{background:#fdf3e2;border-color:#f0dcb8;color:var(--amber)}
 
+/* action menu (replaces the old tap-to-cycle, which could be hit by accident) */
+.popmenu{position:fixed;z-index:70;background:#fff;border-radius:14px;padding:6px;
+  box-shadow:0 8px 30px rgba(20,32,44,.22);min-width:150px}
+.popitem{display:block;width:100%;text-align:left;padding:11px 13px;border-radius:10px;font-size:14px}
+.popitem:active{background:#eef2f6}
+
 /* checkbox */
 .cb{flex:0 0 24px;width:24px;height:24px;border-radius:7px;border:1.6px solid #c3d2dd;background:#fff;
   display:flex;align-items:center;justify-content:center;margin-top:1px}
@@ -363,6 +369,36 @@ function state(t){
 const stLabel=s=>s===1?'已完成':s===2?'未完成':'待办';
 function touch(){dirty=true;setSync('未同步',false);}
 
+/* 设置某条任务的状态。已完成会级联子任务；未完成会保留子任务进度。 */
+function setState(t,next){
+  t.Done=next===1;
+  t.NotCompleted=next===2;
+  if(next===1)(t.Children||[]).forEach(x=>{x.Done=true;x.NotCompleted=false;});
+  if(next===2)(t.Children||[]).forEach(x=>{x.NotCompleted=true;x.Done=false;});
+  touch();render();
+  push('状态：'+stLabel(next)+' · '+t.Title).catch(()=>{});
+}
+
+/* 简单的动作菜单：比"点一下循环切换"安全得多，误触只需关掉 */
+function uiMenu(anchor,items){
+  const old=document.getElementById('popmenu');
+  if(old)old.remove();
+  const menu=el('div','popmenu');menu.id='popmenu';
+  items.forEach(([label,fn])=>{
+    const b=el('button','popitem');b.textContent=label;
+    b.onclick=()=>{menu.remove();fn();};
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  setTimeout(()=>{
+    const r2=anchor.getBoundingClientRect();
+    menu.style.left=Math.max(8,Math.min(r2.left,window.innerWidth-menu.offsetWidth-8))+'px';
+    menu.style.top=(r2.bottom+6)+'px';
+    const close=e=>{if(!menu.contains(e.target)){menu.remove();document.removeEventListener('pointerdown',close);}};
+    document.addEventListener('pointerdown',close);
+  },0);
+}
+
 /* ---------- 渲染 ---------- */
 function render(){
   $('#datelbl').textContent=dateLabel();
@@ -441,13 +477,16 @@ function card(t,i){
   c.appendChild(row);
 
   const acts=el('div','acts');
+  // 状态改成点开菜单选择，不再"点一下循环切换"——循环切换会被误触，且没有任何提示
   const chip=el('button','chip'+(s===1?' done':s===2?' nc':''));
-  chip.textContent=stLabel(s);
+  chip.textContent=stLabel(s)+' ▾';
   chip.onclick=()=>{
-    const next=s===0?1:s===1?2:0;
-    t.Done=next===1;t.NotCompleted=next===2;
-    if(next!==2)(t.Children||[]).forEach(x=>{x.Done=next===1;x.NotCompleted=false;});
-    touch();render();push('状态：'+t.Title);
+    const items=[
+      ['标记为已完成',()=>setState(t,1)],
+      ['标记为未完成',()=>setState(t,2)],
+      ['改回待办',()=>setState(t,0)]
+    ];
+    uiMenu(chip,items);
   };
   acts.appendChild(chip);
   const ed=el('button','chip');ed.textContent='编辑';
