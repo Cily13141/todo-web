@@ -1,7 +1,8 @@
 {
   "name": "todolist",
   "short_name": "todolist",
-  "start_url": ".",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#E7EEF5",
   "theme_color": "#FFFFFF",
