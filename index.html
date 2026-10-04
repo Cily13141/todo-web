@@ -254,8 +254,15 @@ const LS_TOKEN='td_token', LS_CACHE='td_cache', LS_SHA='td_sha';
 const $=s=>document.querySelector(s);
 const el=(t,c)=>{const n=document.createElement(t);if(c)n.className=c;return n;};
 
-let token=localStorage.getItem(LS_TOKEN)||'';
-let book=null, sha=localStorage.getItem(LS_SHA)||'', dirty=false;
+/* ---------- 本地存储（失败必须说话，否则用户会以为"又要我填一次"是正常的） ---------- */
+const store={
+  ok:true,
+  get(k){try{return localStorage.getItem(k);}catch(e){this.ok=false;return null;}},
+  set(k,v){try{localStorage.setItem(k,v);return true;}catch(e){this.ok=false;return false;}},
+  del(k){try{localStorage.removeItem(k);}catch(e){this.ok=false;}}
+};
+let token=store.get(LS_TOKEN)||'';
+let book=null, sha=store.get(LS_SHA)||'', dirty=false;
 let view='day', day=new Date(), busy=false;
 
 /* ---------- 小工具 ---------- */
@@ -294,8 +301,8 @@ async function pull(force){
   sha=j.sha;
   const text=decodeURIComponent(escape(atob(j.content.replace(/\n/g,''))));
   book=JSON.parse(text);
-  localStorage.setItem(LS_CACHE,JSON.stringify(book));
-  localStorage.setItem(LS_SHA,sha);
+  store.set(LS_CACHE,JSON.stringify(book));
+  store.set(LS_SHA,sha);
   return true;
 }
 async function push(message){
@@ -316,7 +323,7 @@ async function push(message){
     if(!r.ok){throw new Error('保存失败（HTTP '+r.status+'）');}
     const j=await r.json();
     sha=j.content.sha;
-    localStorage.setItem(LS_SHA,sha);
+    store.set(LS_SHA,sha);
     dirty=false;setSync('已同步',false);
     $('#saved').textContent='已保存 '+new Date().toTimeString().slice(0,5);
   }catch(e){
@@ -732,28 +739,33 @@ $('#go').onclick=async()=>{
   const v=$('#tok').value.trim();
   if(!v){toast('请填写令牌');return;}
   const prev=token;
-  token=v;localStorage.setItem(LS_TOKEN,v);
+  token=v;
+  const saved=store.set(LS_TOKEN,v);
   setSync('连接中…',true);
   try{
     await pull(true);
     hideLogin();render();setSync('已同步',false);
-    toast('连接成功');
+    toast(saved?'连接成功':'连接成功（本机存不住令牌，下次打开还要填一次）',saved?2000:4200);
   }catch(e){
     token=prev;                       // 新令牌没用就把旧的还回去
-    if(prev)localStorage.setItem(LS_TOKEN,prev);else localStorage.removeItem(LS_TOKEN);
+    if(prev)store.set(LS_TOKEN,prev);else store.del(LS_TOKEN);
     setSync(prev?'离线':'连接失败',false);
     toast(e.message,3200);
   }
 };
 (async function boot(){
   let cached=null;
-  try{cached=localStorage.getItem(LS_CACHE);}catch(e){}
+  cached=store.get(LS_CACHE);
   if(cached){try{book=JSON.parse(cached);}catch(e){book=null;}}
 
   if(!token){
-    // 从没填过令牌
+    // 从没填过令牌（或本机存不住）
     if(book){hideLogin();render();setSync('离线数据',false);}else{showLogin();}
     return;
+  }
+  if(!store.ok){
+    setSync('本机存不住令牌',false);
+    toast('这台设备的浏览器不允许保存数据，所以每次打开都要重填令牌。',5000);
   }
 
   if(book){
