@@ -233,6 +233,8 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:22px 0 8px}
   <p>第一次使用需要填入 GitHub 令牌。它会存在这台手机里，只用于读写你自己的私有仓库。</p>
   <div class="f"><label>GitHub 令牌</label><input id="tok" placeholder="github_pat_..." autocapitalize="off" autocomplete="off" spellcheck="false"></div>
   <button class="btn pri wide" id="go">连接</button>
+  <button class="btn wide" id="diag" style="margin-top:9px">先做一次自检</button>
+  <p id="diagout" style="font-size:12.5px;white-space:pre-wrap;margin-top:10px;color:#2e445c"></p>
   <p style="font-size:12px">令牌存在手机浏览器本地存储中。如果换手机或清了浏览器数据，需要重新填一次。</p>
 </div>
 
@@ -716,6 +718,32 @@ $('#sync').onclick=async()=>{
 /* ---------- 启动 ---------- */
 function showLogin(){ $('#login').style.display='flex'; }
 function hideLogin(){ $('#login').style.display='none'; }
+
+/* 自检：一次性回答"这台设备到底能不能保存数据" */
+$('#diag').onclick=()=>{
+  const out=[];
+  const line=(k,v)=>out.push(k+'：'+v);
+  line('页面来源',location.origin);
+  line('从主屏幕启动',(navigator.standalone===true)?'是':'否（在浏览器里打开）');
+  let wrote=false,err='';
+  try{
+    const probe='td_probe_'+Date.now();
+    localStorage.setItem(probe,'1');
+    wrote=(localStorage.getItem(probe)==='1');
+    localStorage.removeItem(probe);
+  }catch(e){ err=e.name+': '+e.message; }
+  line('写入后能读回',wrote?'是':'否');
+  if(err)line('写入报错',err);
+  let n=0;try{n=localStorage.length;}catch(e){}
+  line('当前存储条数',String(n));
+  let hasTok='读不到';
+  try{hasTok=localStorage.getItem('td_token')?'有':'没有';}catch(e){}
+  line('已保存令牌',hasTok);
+  out.push('');
+  line('判断',wrote?'这台设备能保存令牌，问题在别处':'这台设备存不住数据 —— 每次打开都必须重填');
+  $('#diagout').textContent=out.join('\n');
+};
+
 function showRetry(msg){
   // 令牌是好的、只是这次没连上：给一个重试入口，不要让用户以为要去重新生成令牌
   const L=$('#list');
