@@ -709,9 +709,29 @@ $('#sync').onclick=async()=>{
 /* ---------- 启动 ---------- */
 function showLogin(){ $('#login').style.display='flex'; }
 function hideLogin(){ $('#login').style.display='none'; }
+function showRetry(msg){
+  // 令牌是好的、只是这次没连上：给一个重试入口，不要让用户以为要去重新生成令牌
+  const L=$('#list');
+  L.innerHTML='';
+  const box=el('div','empty');
+  box.textContent=msg+'\n\n令牌已经保存在这台手机里，不用重新粘贴。\n多半是网络问题，确认能上 GitHub 后点下面的按钮重试。';
+  L.appendChild(box);
+  const b=el('button','btn pri wide');b.textContent='重新连接';
+  b.onclick=async()=>{
+    setSync('连接中…',true);
+    try{
+      await pull(true);render();setSync('已同步',false);toast('已连上');
+    }catch(e){setSync('离线',false);toast(e.message,3200);}
+  };
+  L.appendChild(b);
+  const b2=el('button','btn wide');b2.textContent='换一个令牌';b2.style.marginTop='8px';
+  b2.onclick=()=>{$('#tok').value=token;showLogin();};
+  L.appendChild(b2);
+}
 $('#go').onclick=async()=>{
   const v=$('#tok').value.trim();
   if(!v){toast('请填写令牌');return;}
+  const prev=token;
   token=v;localStorage.setItem(LS_TOKEN,v);
   setSync('连接中…',true);
   try{
@@ -719,23 +739,41 @@ $('#go').onclick=async()=>{
     hideLogin();render();setSync('已同步',false);
     toast('连接成功');
   }catch(e){
-    setSync('连接失败',false);
+    token=prev;                       // 新令牌没用就把旧的还回去
+    if(prev)localStorage.setItem(LS_TOKEN,prev);else localStorage.removeItem(LS_TOKEN);
+    setSync(prev?'离线':'连接失败',false);
     toast(e.message,3200);
   }
 };
 (async function boot(){
-  const cached=localStorage.getItem(LS_CACHE);
-  if(cached){try{book=JSON.parse(cached);}catch(e){}}
-  if(!token){ showLogin(); if(book){hideLogin();render();setSync('离线数据',false);} return; }
+  let cached=null;
+  try{cached=localStorage.getItem(LS_CACHE);}catch(e){}
+  if(cached){try{book=JSON.parse(cached);}catch(e){book=null;}}
+
+  if(!token){
+    // 从没填过令牌
+    if(book){hideLogin();render();setSync('离线数据',false);}else{showLogin();}
+    return;
+  }
+
+  if(book){
+    hideLogin();render();setSync('连接中…',true);
+  }else{
+    // 有令牌但还没有任何缓存：不能显示空列表，否则看起来像"任务都没了"
+    hideLogin();
+    $('#list').innerHTML='';
+    $('#list').appendChild(el('div','empty')).textContent='第一次连接，正在读取云端数据…';
+    setSync('连接中…',true);
+  }
+
   try{
-    if(!book)book=emptyBook();
-    render();
     await pull(true);
-    render();setSync('已同步',false);
+    hideLogin();render();setSync('已同步',false);
+    if(!book)toast('已读取云端数据');
   }catch(e){
     setSync('离线',false);
-    if(book)render();
-    toast('暂时连不上云端，正在用本地缓存：'+e.message,3200);
+    if(book){render();toast('暂时连不上云端，用的是上次缓存：'+e.message,3200);}
+    else showRetry('没有连上云端，所以现在看不到任何数据。');
   }
 })();
 </script>
