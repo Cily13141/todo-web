@@ -1,6 +1,6 @@
 {
-  "name": "今日清单",
-  "short_name": "今日清单",
+  "name": "todolist",
+  "short_name": "todolist",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#E7EEF5",
